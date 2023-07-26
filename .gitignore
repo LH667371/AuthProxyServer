@@ -1,0 +1,9 @@
+.swp
+.idea/
+.vscode/
+bin/
+**/.DS_Store
+*.exe
+*.log
+vendor/
+temp/
