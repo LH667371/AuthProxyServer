@@ -1,9 +1,7 @@
 package main
 
 import (
-	"github.com/gorilla/websocket"
 	"log"
-	"net/http"
 	"os"
 )
 
@@ -19,9 +17,3 @@ var (
 var (
 	logger *log.Logger
 )
-
-var upgrades = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
