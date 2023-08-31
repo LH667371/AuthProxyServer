@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 )
 
@@ -14,6 +15,14 @@ import (
 	REDIS_DB: Redis 数据库编号，Default：0
 	REDIRECT_URL: 开启出现错误重定向的地址， 示例：https://www.xxx.com
 	HEARTBEAT_TIME: websocket连接心跳，单位：秒(s)， Default：30s
+*/
+
+/*
+	// 添加性能分析路由
+	go tool pprof http://localhost:6060/debug/pprof/heap
+	top：显示占用内存最多的函数。
+	list <function>：显示特定函数的源代码和调用位置。
+	web：在浏览器中显示可视化的分析结果（需要Graphviz支持）。
 */
 
 func main() {

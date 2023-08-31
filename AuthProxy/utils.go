@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -43,4 +44,20 @@ func removeHostAndProtocol(urlStr string, requestHost string) string {
 	}
 
 	return urlStr
+}
+
+func getClientIP(r *http.Request) string {
+	forwarded := r.Header.Get("X-Forwarded-For")
+	if forwarded != "" {
+		ips := strings.Split(forwarded, ", ")
+		// 第一个IP地址是客户端的真实IP
+		return ips[0]
+	}
+	// 如果 X-Forwarded-For 不存在，则使用 RemoteAddr
+	remoteAddrParts := strings.Split(r.RemoteAddr, ":")
+	if len(remoteAddrParts) > 0 {
+		return remoteAddrParts[0]
+	}
+	// 如果都无法获取，则返回空字符串
+	return ""
 }

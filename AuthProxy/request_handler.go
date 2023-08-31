@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"strings"
+	"sync"
 )
 
 func handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -40,7 +41,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if host == "" || !IsPortValid(host) {
-		logger.Printf("host not found, request host: %s", r.Host)
+		logger.Printf("host not found, request host: %s，Request from IP: %s", r.Host, getClientIP(r))
 		if redirectURL != "" {
 			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 			http.Redirect(w, r, redirectURL, http.StatusFound)
@@ -83,16 +84,22 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//host := "192.168.2.94:60973"
+	//host := "192.168.5.249:56912"
+
+	wg := &sync.WaitGroup{}
 
 	connection := r.Header.Get("Connection")
 	if connection == "Upgrade" {
 		//fmt.Println(r.Host, r.URL.Path)
 		// Connection 值为 Upgrade，进行ws转发
-		handleWebSocket(w, r, host)
+		wg.Add(1)
+		go handleWebSocket(w, r, host, wg)
+		wg.Wait()
 		return
 	}
 
 	// 将请求转发为HTTP请求
-	handleHTTP(w, r, host)
+	wg.Add(1)
+	go handleHTTP(w, r, host, wg)
+	wg.Wait()
 }

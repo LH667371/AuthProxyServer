@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strings"
+	"sync"
 )
 
-func handleHTTP(w http.ResponseWriter, r *http.Request, host string) {
+func handleHTTP(w http.ResponseWriter, r *http.Request, host string, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	// 构建目标URL，将请求转发到目标主机
 	targetURL := fmt.Sprintf("http://%s%s", host, r.URL.Path)
 
@@ -50,18 +52,15 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, host string) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		if urlErr, ok := err.(*url.Error); ok && urlErr.Timeout() {
-			// 发生超时错误
-			logger.Printf("Failed to send HTTP request: %s", err)
-			//w.WriteHeader(http.StatusInternalServerError)
-			if redirectURL != "" {
-				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
-				http.Redirect(w, r, redirectURL, http.StatusFound)
-			} else {
-				http.ServeFile(w, r, "./static/connection_error.html")
-			}
-			return
+		logger.Printf("Failed to send HTTP request: %s", err)
+
+		if redirectURL != "" {
+			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
+			http.Redirect(w, r, redirectURL, http.StatusFound)
+		} else {
+			http.ServeFile(w, r, "./static/connection_error.html")
 		}
+		return
 	}
 
 	defer func(Body io.ReadCloser) {
@@ -73,7 +72,6 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, host string) {
 
 	// 将响应的Header复制到原始响应中
 	copyHeaders(w.Header(), resp.Header, host)
-
 	// 将响应的状态码写回给客户端
 	w.WriteHeader(resp.StatusCode)
 
