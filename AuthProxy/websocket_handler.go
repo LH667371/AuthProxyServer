@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/gorilla/websocket"
@@ -105,58 +106,78 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, host string, wsWg *
 
 	wg := &sync.WaitGroup{}
 	wg.Add(2) // 如果还有其他的协程，可以继续添加
+	// 创建一个父context，用于控制所有goroutine的取消
+	parentCtx := context.Background()
+	ctx, cancel := context.WithCancel(parentCtx)
 
 	targetConnMessages := make(chan Message)
 	connMessages := make(chan Message)
 
 	//go sendHeartbeat(targetConnMessages)
-	go sendHeartbeat(connMessages)
+	go sendHeartbeat(ctx, connMessages)
 
 	// 启动两个 goroutine 来进行双向消息转发
-	go copyWebSocketMessages(targetConn, conn, targetConnMessages, wg)
-	go copyWebSocketMessages(conn, targetConn, connMessages, wg)
+	go copyWebSocketMessages(ctx, cancel, targetConn, conn, targetConnMessages, wg)
+	go copyWebSocketMessages(ctx, cancel, conn, targetConn, connMessages, wg)
 
 	// 等待所有协程完成
 	wg.Wait()
 }
 
-func copyWebSocketMessages(dst *websocket.Conn, src *websocket.Conn, messages chan Message, wg *sync.WaitGroup) {
+func copyWebSocketMessages(ctx context.Context, cancel context.CancelFunc, dst *websocket.Conn, src *websocket.Conn, messages chan Message, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	go func() {
 		defer close(messages)
 
 		for {
-			messageType, message, err := src.ReadMessage()
-			if err != nil {
-				if !websocket.IsCloseError(
-					err,
-					websocket.CloseNormalClosure,
-					websocket.CloseGoingAway,
-					websocket.CloseNoStatusReceived,
-					websocket.CloseAbnormalClosure,
-				) {
-					logger.Printf("Failed to read WebSocket message: %s", err)
-				}
+			select {
+			case <-ctx.Done():
 				return
-			}
+			default:
+				messageType, message, err := src.ReadMessage()
+				if err != nil {
+					if !websocket.IsCloseError(
+						err,
+						websocket.CloseNormalClosure,
+						websocket.CloseGoingAway,
+						websocket.CloseNoStatusReceived,
+						websocket.CloseAbnormalClosure,
+					) {
+						logger.Printf("Failed to read WebSocket message: %s", err)
+					}
+					cancel()
+					return
+				}
 
-			messages <- Message{Type: messageType, Payload: message}
+				messages <- Message{Type: messageType, Payload: message}
+			}
 		}
 	}()
 
 	// 写入消息
-	for msg := range messages {
-		if err := dst.WriteMessage(msg.Type, msg.Payload); err != nil {
-			if !errors.Is(err, websocket.ErrCloseSent) {
-				logger.Printf("Failed to write WebSocket message: %s", err)
-			}
+	for {
+		select {
+		case <-ctx.Done():
 			return
+		case msg, ok := <-messages:
+			if !ok {
+				cancel()
+				return
+			}
+
+			if err := dst.WriteMessage(msg.Type, msg.Payload); err != nil {
+				if !errors.Is(err, websocket.ErrCloseSent) {
+					logger.Printf("Failed to write WebSocket message: %s", err)
+				}
+				cancel()
+				return
+			}
 		}
 	}
 }
 
-func sendHeartbeat(messages chan Message) {
+func sendHeartbeat(ctx context.Context, messages chan Message) {
 	defer func() {
 		if r := recover(); r != nil {
 			return
@@ -168,6 +189,11 @@ func sendHeartbeat(messages chan Message) {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		messages <- Message{Type: websocket.PingMessage, Payload: []byte{}}
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			messages <- Message{Type: websocket.PingMessage, Payload: []byte{}}
+		}
 	}
 }

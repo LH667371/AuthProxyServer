@@ -24,6 +24,8 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 			cookieKeys[i] = strings.TrimSpace(cookieKeys[i])
 		}
 	}
+	// 获取代理请求是否为websocket
+	connection := r.Header.Get("Connection")
 
 	// 检查 cookie 中的 session 值是否正确
 	found := false
@@ -31,33 +33,48 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	host, tokens, err := GetFrontendHost(r.Host)
 	if err != nil {
 		logger.Printf("Redis error: %s", err)
-		if redirectURL != "" {
-			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
-			http.Redirect(w, r, redirectURL, http.StatusFound)
+		if connection == "Upgrade" {
+			handleWebSocketConnectionError(w, r, "转发服务异常，请联系管理员！")
 		} else {
-			http.ServeFile(w, r, "./static/redis_error.html")
+			if redirectURL != "" {
+				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
+				http.Redirect(w, r, redirectURL, http.StatusFound)
+			} else {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				serveStaticHTML(w, "./static/redis_error.html")
+			}
 		}
 		return
 	}
 
 	if host == "" || !IsPortValid(host) {
 		logger.Printf("host not found, request host: %s，Request from IP: %s", r.Host, getClientIP(r))
-		if redirectURL != "" {
-			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
-			http.Redirect(w, r, redirectURL, http.StatusFound)
+		if connection == "Upgrade" {
+			handleWebSocketConnectionError(w, r, "无法访问，服务未找到。")
 		} else {
-			http.ServeFile(w, r, "./static/not_found_error.html")
+			if redirectURL != "" {
+				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
+				http.Redirect(w, r, redirectURL, http.StatusFound)
+			} else {
+				w.WriteHeader(http.StatusNotFound)
+				serveStaticHTML(w, "./static/not_found_error.html")
+			}
 		}
 		return
 	}
 
 	if len(tokens) == 0 {
 		logger.Printf("token not set, request host: %s", r.Host)
-		if redirectURL != "" {
-			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
-			http.Redirect(w, r, redirectURL, http.StatusFound)
+		if connection == "Upgrade" {
+			handleWebSocketConnectionError(w, r, "无法访问，服务未启动或者配置出现错误 . . .")
 		} else {
-			http.ServeFile(w, r, "./static/connection_error.html")
+			if redirectURL != "" {
+				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
+				http.Redirect(w, r, redirectURL, http.StatusFound)
+			} else {
+				w.WriteHeader(http.StatusBadRequest)
+				serveStaticHTML(w, "./static/connection_error.html")
+			}
 		}
 		return
 	}
@@ -75,11 +92,16 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !found {
-		if redirectURL != "" {
-			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
-			http.Redirect(w, r, redirectURL, http.StatusFound)
+		if connection == "Upgrade" {
+			handleWebSocketConnectionError(w, r, "无权限访问！")
 		} else {
-			http.ServeFile(w, r, "./static/authentication_error.html")
+			if redirectURL != "" {
+				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
+				http.Redirect(w, r, redirectURL, http.StatusFound)
+			} else {
+				w.WriteHeader(http.StatusForbidden)
+				serveStaticHTML(w, "./static/authentication_error.html")
+			}
 		}
 		return
 	}
@@ -87,8 +109,6 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 	//host := "192.168.5.249:56912"
 
 	wg := &sync.WaitGroup{}
-
-	connection := r.Header.Get("Connection")
 	if connection == "Upgrade" {
 		//fmt.Println(r.Host, r.URL.Path)
 		// Connection 值为 Upgrade，进行ws转发

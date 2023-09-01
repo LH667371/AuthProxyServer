@@ -1,8 +1,11 @@
 package main
 
 import (
+	"fmt"
+	"github.com/gorilla/websocket"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -60,4 +63,49 @@ func getClientIP(r *http.Request) string {
 	}
 	// 如果都无法获取，则返回空字符串
 	return ""
+}
+
+func serveStaticHTML(w http.ResponseWriter, filePath string) {
+	htmlContent, err := os.ReadFile(filePath)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(htmlContent)
+}
+
+func handleWebSocketConnectionError(w http.ResponseWriter, r *http.Request, errorMessage string) {
+	upgrades := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+	conn, err := upgrades.Upgrade(w, r, nil)
+	if err != nil {
+		// 关闭 conn，以避免资源泄漏
+		if conn != nil {
+			err := conn.Close()
+			if err != nil {
+				logger.Printf("Failed to upgrade WebSocket connection: %s", err)
+				return
+			}
+		}
+		return
+	}
+	defer func(conn *websocket.Conn) {
+		err := conn.Close()
+		if err != nil {
+			//logger.Printf("Failed to close WebSocket connection: %s", err)
+			return
+		}
+	}(conn)
+
+	errMsg := []byte(errorMessage)
+	err = conn.WriteMessage(websocket.TextMessage, errMsg)
+	if err != nil {
+		fmt.Println("WebSocket write error:", err)
+		return
+	}
 }

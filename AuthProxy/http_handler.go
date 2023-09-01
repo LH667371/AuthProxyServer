@@ -31,7 +31,8 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, host string, wg *sync.Wa
 			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 			http.Redirect(w, r, redirectURL, http.StatusFound)
 		} else {
-			http.ServeFile(w, r, "./static/connection_error.html")
+			w.WriteHeader(http.StatusBadRequest)
+			serveStaticHTML(w, "./static/connection_error.html")
 		}
 		return
 	}
@@ -58,7 +59,8 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, host string, wg *sync.Wa
 			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 			http.Redirect(w, r, redirectURL, http.StatusFound)
 		} else {
-			http.ServeFile(w, r, "./static/connection_error.html")
+			w.WriteHeader(http.StatusBadRequest)
+			serveStaticHTML(w, "./static/connection_error.html")
 		}
 		return
 	}
