@@ -28,5 +28,5 @@ RUN chmod +x $WORKDIR/auth-proxy
 #                                   START
 ###############################################################################
 WORKDIR $WORKDIR
-EXPOSE 80 6060
+EXPOSE 80
 CMD ./auth-proxy

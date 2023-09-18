@@ -12,6 +12,13 @@ import (
 func handleHTTP(w http.ResponseWriter, r *http.Request, host string, wg *sync.WaitGroup) {
 	defer wg.Done()
 
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			logger.Printf("Failed to close response body: %s", err)
+		}
+	}(r.Body)
+
 	// 构建目标URL，将请求转发到目标主机
 	targetURL := fmt.Sprintf("http://%s%s", host, r.URL.Path)
 
@@ -31,8 +38,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, host string, wg *sync.Wa
 			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 			http.Redirect(w, r, redirectURL, http.StatusFound)
 		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			serveStaticHTML(w, "./static/connection_error.html")
+			serveStaticHTML(w, "./static/connection_error.html", http.StatusBadRequest)
 		}
 		return
 	}
@@ -59,8 +65,7 @@ func handleHTTP(w http.ResponseWriter, r *http.Request, host string, wg *sync.Wa
 			// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 			http.Redirect(w, r, redirectURL, http.StatusFound)
 		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			serveStaticHTML(w, "./static/connection_error.html")
+			serveStaticHTML(w, "./static/connection_error.html", http.StatusBadRequest)
 		}
 		return
 	}

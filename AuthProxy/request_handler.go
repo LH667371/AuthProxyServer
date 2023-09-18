@@ -40,8 +40,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 				http.Redirect(w, r, redirectURL, http.StatusFound)
 			} else {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				serveStaticHTML(w, "./static/redis_error.html")
+				serveStaticHTML(w, "./static/redis_error.html", http.StatusServiceUnavailable)
 			}
 		}
 		return
@@ -56,8 +55,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 				http.Redirect(w, r, redirectURL, http.StatusFound)
 			} else {
-				w.WriteHeader(http.StatusNotFound)
-				serveStaticHTML(w, "./static/not_found_error.html")
+				serveStaticHTML(w, "./static/not_found_error.html", http.StatusNotFound)
 			}
 		}
 		return
@@ -72,8 +70,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 				http.Redirect(w, r, redirectURL, http.StatusFound)
 			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				serveStaticHTML(w, "./static/connection_error.html")
+				serveStaticHTML(w, "./static/connection_error.html", http.StatusBadRequest)
 			}
 		}
 		return
@@ -99,8 +96,7 @@ func handleRequest(w http.ResponseWriter, r *http.Request) {
 				// 如果存在 REDIRECT_URL 环境变量，则使用配置的重定向链接
 				http.Redirect(w, r, redirectURL, http.StatusFound)
 			} else {
-				w.WriteHeader(http.StatusForbidden)
-				serveStaticHTML(w, "./static/authentication_error.html")
+				serveStaticHTML(w, "./static/authentication_error.html", http.StatusForbidden)
 			}
 		}
 		return

@@ -65,13 +65,14 @@ func getClientIP(r *http.Request) string {
 	return ""
 }
 
-func serveStaticHTML(w http.ResponseWriter, filePath string) {
+func serveStaticHTML(w http.ResponseWriter, filePath string, status int) {
 	htmlContent, err := os.ReadFile(filePath)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
+	w.WriteHeader(status)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(htmlContent)
 }
