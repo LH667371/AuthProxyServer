@@ -1,6 +1,7 @@
-package main
+package utils
 
 import (
+	"AuthProxyServer/config"
 	"context"
 	"fmt"
 	"github.com/redis/go-redis/v9"
@@ -10,17 +11,17 @@ import (
 )
 
 func getRedisAddr() string {
-	if redisAddr == "" {
-		redisAddr = "127.0.0.1:6379"
+	if config.RedisAddr == "" {
+		config.RedisAddr = "127.0.0.1:6379"
 	}
-	return redisAddr
+	return config.RedisAddr
 }
 
 func getRedisDB() int {
-	if redisDb == "" {
+	if config.RedisDb == "" {
 		return 0
 	}
-	db, err := strconv.Atoi(redisDb)
+	db, err := strconv.Atoi(config.RedisDb)
 	if err != nil {
 		// 处理转换错误
 		// 这里可以返回默认的 DB 编号或进行其他错误处理
@@ -35,9 +36,9 @@ func GetFrontendHost(host string) (string, []string, error) {
 
 	// 创建 Redis 客户端
 	client := redis.NewClient(&redis.Options{
-		Addr:     getRedisAddr(), // Redis 服务器地址
-		Password: redisPassword,  // Redis 访问密码（如果设置了密码）
-		DB:       getRedisDB(),   // Redis 数据库编号
+		Addr:     getRedisAddr(),       // Redis 服务器地址
+		Password: config.RedisPassword, // Redis 访问密码（如果设置了密码）
+		DB:       getRedisDB(),         // Redis 数据库编号
 	})
 
 	// 检查 Redis 连接是否成功
@@ -98,7 +99,7 @@ func IsPortValid(host string) bool {
 	return port >= 1 && port <= 65535
 }
 
-func isInSlice(s string, slice []string) bool {
+func IsinSlice(s string, slice []string) bool {
 	for _, item := range slice {
 		if item == s || item == "ALL" {
 			return true

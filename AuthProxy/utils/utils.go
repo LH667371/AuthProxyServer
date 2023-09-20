@@ -1,22 +1,25 @@
-package main
+package utils
 
 import (
+	"AuthProxyServer/config"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
-func getHeartbeatTime() time.Duration {
-	if HeartbeatTime == "" {
+func GetHeartbeatTime() time.Duration {
+	if config.HeartbeatTime == "" {
 		return 30 * time.Second
 	}
-	heartbeatTime, err := strconv.Atoi(HeartbeatTime)
+	heartbeatTime, err := strconv.Atoi(config.HeartbeatTime)
 	if err != nil {
 		// 处理转换错误
 		// 这里可以返回默认的 DB 编号或进行其他错误处理
@@ -25,17 +28,16 @@ func getHeartbeatTime() time.Duration {
 	return time.Duration(heartbeatTime) * time.Second
 }
 
-// 判断是否为URL格式
-func isURL(s string) bool {
+// IsURL 判断是否为URL格式
+func IsURL(s string) bool {
 	_, err := url.ParseRequestURI(s)
 	return err == nil
 }
 
-// 删除URL中的主机部分和协议前缀
-func removeHostAndProtocol(urlStr string, requestHost string) string {
+// RemoveHostAndProtocol 删除URL中的主机部分和协议前缀
+func RemoveHostAndProtocol(urlStr string, requestHost string) string {
 	// 使用正则表达式匹配URL中的主机部分和协议前缀
-	re := regexp.MustCompile(`^(https?://)?([^:/]+(:\d+)?)`)
-	urlMatches := re.FindStringSubmatch(urlStr)
+	urlMatches := config.UrlPattern.FindStringSubmatch(urlStr)
 	if len(urlMatches) >= 3 {
 		//protocol := urlMatches[1] // 匹配到的协议部分（包括 "http://" 或 "https://"）
 		host := urlMatches[2] // 匹配到的主机部分
@@ -49,7 +51,8 @@ func removeHostAndProtocol(urlStr string, requestHost string) string {
 	return urlStr
 }
 
-func getClientIP(r *http.Request) string {
+func GetClientIP(c *gin.Context) string {
+	r := c.Request
 	forwarded := r.Header.Get("X-Forwarded-For")
 	if forwarded != "" {
 		ips := strings.Split(forwarded, ", ")
@@ -65,31 +68,19 @@ func getClientIP(r *http.Request) string {
 	return ""
 }
 
-func serveStaticHTML(w http.ResponseWriter, filePath string, status int) {
-	htmlContent, err := os.ReadFile(filePath)
-	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(status)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write(htmlContent)
-}
-
-func handleWebSocketConnectionError(w http.ResponseWriter, r *http.Request, errorMessage string) {
+func HandleWebSocketConnectionError(c *gin.Context, errorMessage string) {
 	upgrades := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
 			return true
 		},
 	}
-	conn, err := upgrades.Upgrade(w, r, nil)
+	conn, err := upgrades.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		// 关闭 conn，以避免资源泄漏
 		if conn != nil {
 			err := conn.Close()
 			if err != nil {
-				logger.Printf("Failed to upgrade WebSocket connection: %s", err)
+				log.Printf("Failed to upgrade WebSocket connection: %s", err)
 				return
 			}
 		}
@@ -107,6 +98,35 @@ func handleWebSocketConnectionError(w http.ResponseWriter, r *http.Request, erro
 	err = conn.WriteMessage(websocket.TextMessage, errMsg)
 	if err != nil {
 		fmt.Println("WebSocket write error:", err)
+		return
+	}
+}
+
+func ServeFileWithStatusCode(c *gin.Context, filePath string, statusCode int) {
+	// 打开文件
+	file, err := os.Open(filePath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"error": "File not found",
+		})
+		return
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			log.Printf("Failed to close file: %s", err)
+		}
+	}(file)
+
+	// 设置状态码
+	c.Status(statusCode)
+
+	// 将文件内容复制到响应主体
+	_, err = io.Copy(c.Writer, file)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to send file",
+		})
 		return
 	}
 }

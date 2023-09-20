@@ -1,10 +1,13 @@
-package main
+package handler
 
 import (
+	"AuthProxyServer/utils"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -15,19 +18,17 @@ type Message struct {
 	Payload []byte
 }
 
-func handleWebSocket(w http.ResponseWriter, r *http.Request, host string, wsWg *sync.WaitGroup) {
-	defer wsWg.Done()
-
+func HandleWebSocket(c *gin.Context, host string) {
 	// 构建目标URL，将WebSocket连接转发到目标主机
-	targetURL := fmt.Sprintf("ws://%s%s", host, r.URL.Path)
+	targetURL := fmt.Sprintf("ws://%s%s", host, c.Request.URL.Path)
 
-	if r.URL.RawQuery != "" {
-		targetURL = fmt.Sprintf("%s?%s", targetURL, r.URL.RawQuery)
+	if c.Request.URL.RawQuery != "" {
+		targetURL = fmt.Sprintf("%s?%s", targetURL, c.Request.URL.RawQuery)
 	}
 
 	headers := make(http.Header)
 
-	for k, v := range r.Header {
+	for k, v := range c.Request.Header {
 		if k == "Origin" ||
 			k == "Upgrade" ||
 			k == "Connection" ||
@@ -49,7 +50,7 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, host string, wsWg *
 		if targetConn != nil {
 			err := targetConn.Close()
 			if err != nil {
-				logger.Printf("Failed to establish WebSocket connection to target: %s", err)
+				log.Printf("Failed to establish WebSocket connection to target: %s", err)
 				return
 			}
 		}
@@ -83,13 +84,13 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request, host string, wsWg *
 		},
 	}
 
-	conn, err := upgrades.Upgrade(w, r, respHeaders)
+	conn, err := upgrades.Upgrade(c.Writer, c.Request, respHeaders)
 	if err != nil {
 		// 关闭 conn，以避免资源泄漏
 		if conn != nil {
 			err := conn.Close()
 			if err != nil {
-				logger.Printf("Failed to upgrade WebSocket connection: %s", err)
+				log.Printf("Failed to upgrade WebSocket connection: %s", err)
 				return
 			}
 		}
@@ -144,7 +145,7 @@ func copyWebSocketMessages(ctx context.Context, cancel context.CancelFunc, dst *
 						websocket.CloseNoStatusReceived,
 						websocket.CloseAbnormalClosure,
 					) {
-						logger.Printf("Failed to read WebSocket message: %s", err)
+						log.Printf("Failed to read WebSocket message: %s", err)
 					}
 					cancel()
 					return
@@ -168,7 +169,7 @@ func copyWebSocketMessages(ctx context.Context, cancel context.CancelFunc, dst *
 
 			if err := dst.WriteMessage(msg.Type, msg.Payload); err != nil {
 				if !errors.Is(err, websocket.ErrCloseSent) {
-					logger.Printf("Failed to write WebSocket message: %s", err)
+					log.Printf("Failed to write WebSocket message: %s", err)
 				}
 				cancel()
 				return
@@ -184,7 +185,7 @@ func sendHeartbeat(ctx context.Context, messages chan Message) {
 		}
 	}()
 
-	heartbeatTime := getHeartbeatTime()
+	heartbeatTime := utils.GetHeartbeatTime()
 	ticker := time.NewTicker(heartbeatTime)
 	defer ticker.Stop()
 

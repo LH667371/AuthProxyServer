@@ -1,23 +1,24 @@
 package main
 
 import (
-	"io"
-	"log"
-	"net/http"
-	_ "net/http/pprof"
-	"os"
+	"AuthProxyServer/config"
+	"AuthProxyServer/handler"
+	"AuthProxyServer/middlewares"
+	"github.com/gin-contrib/pprof"
+	"github.com/gin-gonic/gin"
 )
 
 /*
-	COOKIE_KEYS: 鉴权获取的值，Default：session，示例：session1,session2
-	REDIS_ADDR: Redis 服务器地址, Default：127.0.0.1:6379
-	REDIS_PASSWORD: Redis 访问密码（如果设置了密码），Default：空字符串
-	REDIS_DB: Redis 数据库编号，Default：0
-	REDIRECT_URL: 开启出现错误重定向的地址， 示例：https://www.xxx.com
-	HEARTBEAT_TIME: websocket连接心跳，单位：秒(s)， Default：30s
+	COOKIE_KEYS: 鉴权获取的值，示例：session,training_session
+	REDIS_ADDR: Redis 服务器地址, 默认：127.0.0.1:6379
+	REDIS_PASSWORD: Redis 访问密码（如果设置了密码），默认：空字符串
+	REDIS_DB: Redis 数据库编号，默认：0
+	REDIRECT_URL: 开启出现错误重定向的地址， 示例：https://xxxxxx.com
+	HEARTBEAT_TIME: websocket连接心跳，单位：秒(s)， 默认 30s
+	ENABLE_PPROF: 是否开启pprof，开启设置环境变量为 "true", 重启容器
 */
-
 /*
+	_ "net/http/pprof"
 	// 添加性能分析路由
 	go tool pprof http://localhost/debug/pprof/heap
 	top：显示占用内存最多的函数。
@@ -26,21 +27,31 @@ import (
 */
 
 func main() {
-	// 创建日志文件
-	file, err := os.OpenFile("auth-proxy.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
+	if config.EnablePprof == "true" {
+		go func() {
+			pprofRouter := gin.Default()
+			pprof.Register(pprofRouter)
+
+			err := pprofRouter.Run(":6060")
+			if err != nil {
+				return
+			}
+		}()
 	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			log.Fatalf("Failed to open log file: %v", err)
-		}
-	}(file)
 
-	// 设置日志输出到文件和终端
-	logger = log.New(io.MultiWriter(file, os.Stdout), "", log.LstdFlags)
+	router := gin.Default()
+	// 日志设置
+	config.SetupLogger()
+	gin.SetMode(gin.ReleaseMode)
 
-	http.HandleFunc("/", handleRequest)
-	logger.Fatal(http.ListenAndServe(":80", myMiddleware(http.DefaultServeMux)))
+	// 使用CORS中间件
+	router.Use(middlewares.CorsMiddleware)
+	// 路由注册
+	router.Any("/*path", handler.HandleRequest)
+
+	// Default listen and serve on 0.0.0.0:80
+	err := router.Run(":80")
+	if err != nil {
+		return
+	}
 }
